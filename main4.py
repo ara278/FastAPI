@@ -297,15 +297,6 @@ def read_root():
             <div id="suggestions" class="suggestions"></div>
             <div id="searchResults"></div>
         </div>
-        
-        <div>
-            <p><strong>CSVファイル形式:</strong></p>
-            <ul>
-                <li>ヘッダー: "レセプト電算処理システム用コード","薬品名称"</li>
-                <li>レセプト電算処理システム用コード: 数字9桁</li>
-                <li>薬品名称: 全角64文字以内</li>
-            </ul>
-        </div>
     </body>
     </html>
     """
