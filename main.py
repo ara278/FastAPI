@@ -6,7 +6,7 @@ import uvicorn
 from typing import List, Optional
 import json
 
-app = FastAPI(title="文字検索システム", description="CSVデータから文字検索を行うシステム")
+app = FastAPI(title="薬品検索", description="医療・看護必要度の対象薬品を検索するシステム")
 
 # データを読み込む
 def load_data():
@@ -40,7 +40,7 @@ def search_data(query: str, df: pd.DataFrame) -> List[dict]:
                 '薬品名称': row['薬品名称']
             })
     
-    return results[:10]  # 最大10件まで表示
+    return results[:99]  # 最大99件まで表示
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
@@ -194,6 +194,13 @@ async def read_root():
                 color: #666;
                 font-style: italic;
             }
+            .detail-view {
+                background: #e3f2fd;
+                padding: 20px;
+                margin-bottom: 20px;
+                border-radius: 5px;
+                border: 1px solid #2196f3;
+            }
         </style>
     </head>
     <body>
@@ -207,8 +214,8 @@ async def read_root():
                 <button onclick="searchData()" class="search-button">検索</button>
             </div>
             
-            <div id="results" class="results"></div>
             <div id="detailView"></div>
+            <div id="results" class="results"></div>
         </div>
 
         <script>
