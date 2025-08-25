@@ -205,7 +205,7 @@ async def read_root():
     </head>
     <body>
         <div class="container">
-            <h1>🔍 文字検索システム</h1>
+            <h1>🔍 薬品検索</h1>
             
             <div class="search-section">
                 <input type="text" id="searchInput" class="search-input" 
