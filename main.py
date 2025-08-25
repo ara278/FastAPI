@@ -1,146 +1,310 @@
-# main.py
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, Request, Form
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import pandas as pd
-import io
-import os
+import uvicorn
+from typing import List, Optional
+import json
 
-app = FastAPI()
+app = FastAPI(title="文字検索システム", description="CSVデータから文字検索を行うシステム")
+
+# データを読み込む
+def load_data():
+    try:
+        df = pd.read_csv('data.csv')
+        return df
+    except FileNotFoundError:
+        # ファイルが見つからない場合はエラーメッセージを表示
+        print("エラー: data.csvファイルが見つかりません")
+        print("data.csvファイルが正しい場所に存在することを確認してください")
+        return None
+
+# 検索機能
+def search_data(query: str, df: pd.DataFrame) -> List[dict]:
+    if df is None:
+        return []
+    
+    if not query:
+        return []
+    
+    # 薬品名称とコードで検索
+    results = []
+    query_lower = query.lower()
+    
+    for _, row in df.iterrows():
+        # 薬品名称とコードで検索
+        if (query_lower in str(row['薬品名称']).lower() or 
+            query_lower in str(row['レセプト電算処理システム用コード']).lower()):
+            results.append({
+                'レセプト電算処理システム用コード': row['レセプト電算処理システム用コード'],
+                '薬品名称': row['薬品名称']
+            })
+    
+    return results[:10]  # 最大10件まで表示
 
 @app.get("/", response_class=HTMLResponse)
-def read_root():
-    return """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <title>CSVファイル表示システム</title>
-        <meta charset="utf-8">
-        <style>
-            body { font-family: Arial, sans-serif; margin: 40px; }
-            .upload-form { margin: 20px 0; padding: 20px; border: 2px dashed #ccc; }
-            .csv-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-            .csv-table th, .csv-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            .csv-table th { background-color: #f2f2f2; }
-            .error { color: red; }
-            .success { color: green; }
-        </style>
-    </head>
-    <body>
-        <h1>レセプト電算処理システム用コード・薬品名称表示システム</h1>
-        <div class="upload-form">
-            <h2>CSVファイルをアップロード</h2>
-            <form action="/upload" method="post" enctype="multipart/form-data">
-                <input type="file" name="file" accept=".csv" required>
-                <button type="submit">アップロード</button>
-            </form>
-        </div>
-        <div>
-            <p><strong>CSVファイル形式:</strong></p>
-            <ul>
-                <li>ヘッダー: "レセプト電算処理システム用コード","薬品名称"</li>
-                <li>レセプト電算処理システム用コード: 数字9桁</li>
-                <li>薬品名称: 全角64文字以内</li>
-            </ul>
-        </div>
-    </body>
-    </html>
-    """
-
-@app.post("/upload", response_class=HTMLResponse)
-async def upload_csv(file: UploadFile = File(...)):
-    if not file.filename.endswith('.csv'):
-        return HTMLResponse(content="""
+async def read_root():
+    # データファイルの存在確認
+    df = load_data()
+    if df is None:
+        html_content = """
         <!DOCTYPE html>
-        <html>
-        <head><title>エラー</title><meta charset="utf-8"></head>
-        <body>
-            <h1>エラー</h1>
-            <p class="error">CSVファイルをアップロードしてください。</p>
-            <a href="/">戻る</a>
-        </body>
-        </html>
-        """, status_code=400)
-    
-    try:
-        # CSVファイルを読み込み
-        content = await file.read()
-        df = pd.read_csv(io.StringIO(content.decode('utf-8')))
-        
-        # ヘッダーの確認
-        expected_headers = ["レセプト電算処理システム用コード", "薬品名称"]
-        if not all(header in df.columns for header in expected_headers):
-            return HTMLResponse(content=f"""
-            <!DOCTYPE html>
-            <html>
-            <head><title>エラー</title><meta charset="utf-8"></head>
-            <body>
-                <h1>エラー</h1>
-                <p class="error">CSVファイルのヘッダーが正しくありません。</p>
-                <p>期待されるヘッダー: {expected_headers}</p>
-                <p>実際のヘッダー: {list(df.columns)}</p>
-                <a href="/">戻る</a>
-            </body>
-            </html>
-            """, status_code=400)
-        
-        # データの検証
-        validation_errors = []
-        for index, row in df.iterrows():
-            # レセプト電算処理システム用コードの検証（数字9桁）
-            code = str(row["レセプト電算処理システム用コード"])
-            if not code.isdigit() or len(code) != 9:
-                validation_errors.append(f"行{index + 1}: レセプト電算処理システム用コードが9桁の数字ではありません ({code})")
-            
-            # 薬品名称の検証（全角64文字以内）
-            name = str(row["薬品名称"])
-            if len(name) > 64:
-                validation_errors.append(f"行{index + 1}: 薬品名称が64文字を超えています ({len(name)}文字)")
-        
-        # HTMLテーブルの生成
-        table_html = df.to_html(classes='csv-table', index=False, escape=False)
-        
-        return HTMLResponse(content=f"""
-        <!DOCTYPE html>
-        <html>
+        <html lang="ja">
         <head>
-            <title>CSVデータ表示</title>
-            <meta charset="utf-8">
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>文字検索システム - エラー</title>
             <style>
-                body {{ font-family: Arial, sans-serif; margin: 40px; }}
-                .csv-table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
-                .csv-table th, .csv-table td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-                .csv-table th {{ background-color: #f2f2f2; }}
-                .error {{ color: red; }}
-                .success {{ color: green; }}
-                .back-link {{ margin-top: 20px; }}
+                body {
+                    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    max-width: 800px;
+                    margin: 0 auto;
+                    padding: 20px;
+                    background-color: #f5f5f5;
+                }
+                .container {
+                    background: white;
+                    padding: 30px;
+                    border-radius: 10px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                    text-align: center;
+                }
+                .error-icon {
+                    font-size: 64px;
+                    margin-bottom: 20px;
+                }
+                .error-title {
+                    color: #dc3545;
+                    font-size: 24px;
+                    margin-bottom: 20px;
+                }
+                .error-message {
+                    color: #666;
+                    font-size: 16px;
+                    line-height: 1.6;
+                    margin-bottom: 20px;
+                }
+                .error-details {
+                    background: #f8f9fa;
+                    padding: 20px;
+                    border-radius: 5px;
+                    border-left: 4px solid #dc3545;
+                    text-align: left;
+                    margin-top: 20px;
+                }
             </style>
         </head>
         <body>
-            <h1>CSVデータ表示</h1>
-            <p class="success">ファイル "{file.filename}" が正常にアップロードされました。</p>
-            <p>データ件数: {len(df)} 件</p>
-            {f'<div class="error"><h3>検証エラー:</h3><ul>{"".join([f"<li>{error}</li>" for error in validation_errors])}</ul></div>' if validation_errors else '<p class="success">データ検証: エラーなし</p>'}
-            {table_html}
-            <div class="back-link">
-                <a href="/">新しいファイルをアップロード</a>
+            <div class="container">
+                <div class="error-icon">❌</div>
+                <h1 class="error-title">データファイルが見つかりません</h1>
+                <p class="error-message">
+                    data.csvファイルが見つからないため、システムを起動できません。
+                </p>
+                <div class="error-details">
+                    <h3>確認事項：</h3>
+                    <ul>
+                        <li>data.csvファイルが正しい場所に存在するか確認してください</li>
+                        <li>ファイル名のスペルが正しいか確認してください</li>
+                        <li>ファイルの読み取り権限があるか確認してください</li>
+                    </ul>
+                </div>
             </div>
         </body>
         </html>
-        """)
-        
-    except Exception as e:
-        return HTMLResponse(content=f"""
-        <!DOCTYPE html>
-        <html>
-        <head><title>エラー</title><meta charset="utf-8"></head>
-        <body>
-            <h1>エラー</h1>
-            <p class="error">ファイルの処理中にエラーが発生しました: {str(e)}</p>
-            <a href="/">戻る</a>
-        </body>
-        </html>
-        """, status_code=500)
+        """
+        return html_content
+    
+    html_content = """
+    <!DOCTYPE html>
+    <html lang="ja">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>文字検索システム</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+                background-color: #f5f5f5;
+            }
+            .container {
+                background: white;
+                padding: 30px;
+                border-radius: 10px;
+                box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            }
+            h1 {
+                color: #333;
+                text-align: center;
+                margin-bottom: 30px;
+            }
+            .search-section {
+                margin-bottom: 30px;
+            }
+            .search-input {
+                width: 100%;
+                padding: 12px;
+                font-size: 16px;
+                border: 2px solid #ddd;
+                border-radius: 5px;
+                margin-bottom: 10px;
+            }
+            .search-button {
+                background-color: #007bff;
+                color: white;
+                padding: 12px 24px;
+                border: none;
+                border-radius: 5px;
+                cursor: pointer;
+                font-size: 16px;
+            }
+            .search-button:hover {
+                background-color: #0056b3;
+            }
+            .results {
+                margin-top: 20px;
+            }
+            .result-item {
+                background: #f8f9fa;
+                padding: 15px;
+                margin: 10px 0;
+                border-radius: 5px;
+                border-left: 4px solid #007bff;
+                cursor: pointer;
+                transition: background-color 0.2s;
+            }
+            .result-item:hover {
+                background: #e9ecef;
+            }
+            .result-code {
+                color: #666;
+                font-size: 14px;
+                margin-bottom: 5px;
+            }
+            .result-name {
+                font-weight: bold;
+                color: #333;
+                margin-bottom: 5px;
+            }
+            .loading {
+                text-align: center;
+                color: #666;
+                font-style: italic;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>🔍 文字検索システム</h1>
+            
+            <div class="search-section">
+                <input type="text" id="searchInput" class="search-input" 
+                       placeholder="薬品コードまたは薬品名称を入力してください..." 
+                       autocomplete="off">
+                <button onclick="searchData()" class="search-button">検索</button>
+            </div>
+            
+            <div id="results" class="results"></div>
+            <div id="detailView"></div>
+        </div>
+
+        <script>
+            let currentData = [];
+            
+            async function searchData() {
+                const query = document.getElementById('searchInput').value.trim();
+                const resultsDiv = document.getElementById('results');
+                const detailView = document.getElementById('detailView');
+                
+                if (!query) {
+                    resultsDiv.innerHTML = '<p class="loading">検索語を入力してください</p>';
+                    detailView.innerHTML = '';
+                    return;
+                }
+                
+                resultsDiv.innerHTML = '<p class="loading">検索中...</p>';
+                detailView.innerHTML = '';
+                
+                try {
+                    const response = await fetch('/search', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: `query=${encodeURIComponent(query)}`
+                    });
+                    
+                    const data = await response.json();
+                    currentData = data;
+                    displayResults(data);
+                } catch (error) {
+                    resultsDiv.innerHTML = '<p style="color: red;">エラーが発生しました</p>';
+                }
+            }
+            
+            function displayResults(results) {
+                const resultsDiv = document.getElementById('results');
+                
+                if (results.length === 0) {
+                    resultsDiv.innerHTML = '<p class="loading">該当する結果が見つかりませんでした</p>';
+                    return;
+                }
+                
+                let html = '<h3>検索結果 (' + results.length + '件)</h3>';
+                
+                results.forEach((item, index) => {
+                    html += `
+                        <div class="result-item" onclick="showDetail(${index})">
+                            <div class="result-code">コード: ${item.レセプト電算処理システム用コード}</div>
+                            <div class="result-name">${item.薬品名称}</div>
+                        </div>
+                    `;
+                });
+                
+                resultsDiv.innerHTML = html;
+            }
+            
+            function showDetail(index) {
+                const item = currentData[index];
+                const detailView = document.getElementById('detailView');
+                
+                detailView.innerHTML = `
+                    <div class="detail-view">
+                        <h3>詳細情報</h3>
+                        <p><strong>コード:</strong> ${item.レセプト電算処理システム用コード}</p>
+                        <p><strong>薬品名称:</strong> ${item.薬品名称}</p>
+                    </div>
+                `;
+            }
+            
+            // Enterキーで検索
+            document.getElementById('searchInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    searchData();
+                }
+            });
+        </script>
+    </body>
+    </html>
+    """
+    return html_content
+
+@app.post("/search")
+async def search_endpoint(query: str = Form(...)):
+    df = load_data()
+    if df is None:
+        return {"error": "データファイルが見つかりません。data.csvファイルの存在を確認してください。"}
+    results = search_data(query, df)
+    return results
 
 @app.get("/health")
-def health_check():
-    return {"status": "healthy"}
+async def health_check():
+    return {"status": "healthy", "message": "文字検索システムが正常に動作しています"}
+
+if __name__ == "__main__":
+    print("文字検索システムを起動しています...")
+    print("ブラウザで http://localhost:8000 にアクセスしてください")
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
