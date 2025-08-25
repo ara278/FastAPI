@@ -53,7 +53,7 @@ async def read_root():
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>文字検索システム - エラー</title>
+            <title>薬品検索 - エラー</title>
             <style>
                 body {
                     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -121,7 +121,7 @@ async def read_root():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>文字検索システム</title>
+        <title>薬品検索</title>
         <style>
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
